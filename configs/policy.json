@@ -1,0 +1,28 @@
+{
+  "policies": [
+    {
+      "name": "overload_protection",
+      "condition": {
+        "metric": "average_load",
+        "operator": ">",
+        "threshold": 80.0
+      },
+      "action": {
+        "command": "CMD_SET_MODE",
+        "mode": 1
+      }
+    },
+    {
+      "name": "recovery",
+      "condition": {
+        "metric": "average_load",
+        "operator": "<",
+        "threshold": 50.0
+      },
+      "action": {
+        "command": "CMD_SET_MODE",
+        "mode": 0
+      }
+    }
+  ]
+}

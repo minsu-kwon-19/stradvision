@@ -1,0 +1,5 @@
+add_executable(device_simulator_test device_simulator_test.cpp)
+target_link_libraries(device_simulator_test PRIVATE core_lib GTest::gtest_main)
+
+include(GoogleTest)
+gtest_discover_tests(device_simulator_test)
