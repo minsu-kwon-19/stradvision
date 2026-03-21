@@ -106,7 +106,7 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     // Heartbeat
     if (msg->header.type == MessageType::HEARTBEAT) {
         session->updateHeartbeat();
-        spdlog::debug("Agent {} HEARTBEAT", session->getAgentId());
+        // spdlog::debug("Agent {} HEARTBEAT", session->getAgentId());
         return;
     }
 
@@ -116,8 +116,8 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
         payload.deserialize(msg->payload);
         store_.updateAgentState(session->getAgentId(), payload, msg->header.timestamp);
 
-        spdlog::debug("Agent {} STATE (mode: {}, load: {:.2f}%)", session->getAgentId(),
-                      payload.mode, payload.load);
+        spdlog::debug("Agent {} STATE (header_id: {}, load: {:.2f}%)", session->getAgentId(),
+                      msg->header.header_id, payload.load);
         return;
     }
 
@@ -176,7 +176,6 @@ void Controller::startHealthCheck() {
                             overload_mode_ = (policy.action.mode == 1);
 
                             uint32_t next_id = getNextId(MessageType::CMD_SET_MODE);
-                            std::lock_guard<std::mutex> lock(mutex_);
                             for (auto& [id, s] : sessions_) {
                                 if (s->isHealthy()) {
                                     s->send(s->getSetModeMsg(policy.action.mode, next_id));

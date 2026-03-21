@@ -4,8 +4,8 @@
 
 #include <chrono>
 
-#include "core/pool/MessagePool.hpp"
 #include "core/message/BinaryMessageParser.hpp"
+#include "core/pool/MessagePool.hpp"
 
 using namespace core::message;
 using namespace core::comm;
@@ -116,8 +116,14 @@ void Agent::startReporting() {
 }
 
 void Agent::onMessage(std::shared_ptr<Message> msg) {
-    spdlog::info("Received message type: 0x{:04x} from Agent {}",
-                 static_cast<uint16_t>(msg->header.type), msg->header.agent_id);
+    if (msg->header.agent_id == 0) {
+        spdlog::info("Received message type: 0x{:04x} from Controller",
+                     static_cast<uint16_t>(msg->header.type));
+    } else {
+        spdlog::info("Received message type: 0x{:04x} from Agent {}",
+                     static_cast<uint16_t>(msg->header.type), msg->header.agent_id);
+    }
+
     if (msg->header.type == MessageType::CMD_SET_MODE) {
         try {
             CmdSetModePayload payload;
