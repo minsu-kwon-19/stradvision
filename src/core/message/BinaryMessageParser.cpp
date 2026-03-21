@@ -1,8 +1,13 @@
 #include "core/message/BinaryMessageParser.hpp"
-#include "core/message/Message.hpp"
-#include "core/utils/ByteSerializer.hpp"
+
 #include <cstring>
 #include <stdexcept>
+
+#include "core/pool/MessagePool.hpp"
+#include "core/message/Message.hpp"
+#include "core/utils/ByteSerializer.hpp"
+
+using namespace core::pool;
 
 namespace core {
 namespace message {
@@ -75,8 +80,8 @@ std::shared_ptr<Message> BinaryMessageParser::deserialize(const std::vector<uint
         throw std::runtime_error("CRC mismatch");
     }
 
-    auto out_msg              = std::make_shared<Message>(static_cast<MessageType>(type_val),
-                                                          std::move(payload_data), 0, 0, flags);
+    auto out_msg = MessagePool::getInstance().acquire(static_cast<MessageType>(type_val),
+                                                      std::move(payload_data), 0, 0, flags);
     out_msg->header.agent_id  = agent_id;
     out_msg->header.header_id = header_id;
     out_msg->header.timestamp = timestamp;

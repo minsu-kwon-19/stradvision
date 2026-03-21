@@ -38,7 +38,8 @@ void Controller::broadcastCommand(std::shared_ptr<Message> msg) {
 
 void Controller::sendCommandTo(uint32_t agent_id, std::shared_ptr<Message> msg) {
     std::lock_guard<std::mutex> lock(mutex_);
-    auto                        it = sessions_.find(agent_id);
+
+    auto it = sessions_.find(agent_id);
     if (it != sessions_.end() && it->second->isHealthy()) {
         it->second->send(msg);
     }
@@ -143,16 +144,15 @@ void Controller::startHealthCheck() {
         if (!ec) {
             checkPolicyUpdate();
 
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                for (auto it = sessions_.begin(); it != sessions_.end();) {
-                    if (!it->second->isHealthy()) {
-                        spdlog::warn("Agent {} is unhealthy, dropping", it->first);
-                        it->second->disconnect();
-                        it = sessions_.erase(it);
-                    } else {
-                        ++it;
-                    }
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (auto it = sessions_.begin(); it != sessions_.end();) {
+                if (!it->second->isHealthy()) {
+                    spdlog::warn("Agent {} is unhealthy (Heartbeat Timeout > 3s), dropping session",
+                                 it->first);
+                    it->second->disconnect();
+                    it = sessions_.erase(it);
+                } else {
+                    ++it;
                 }
             }
 
@@ -175,11 +175,13 @@ void Controller::startHealthCheck() {
                                          policy.action.mode);
                             overload_mode_ = (policy.action.mode == 1);
 
-                            CmdSetModePayload payload{policy.action.mode};
-                            auto              type = MessageType::CMD_SET_MODE;
-                            auto msg = std::make_shared<Message>(type, payload.serialize(), 0,
-                                                                 getNextId(type));
-                            broadcastCommand(msg);
+                            uint32_t next_id = getNextId(MessageType::CMD_SET_MODE);
+                            std::lock_guard<std::mutex> lock(mutex_);
+                            for (auto& [id, s] : sessions_) {
+                                if (s->isHealthy()) {
+                                    s->send(s->getSetModeMsg(policy.action.mode, next_id));
+                                }
+                            }
                         }
                     }
                 }

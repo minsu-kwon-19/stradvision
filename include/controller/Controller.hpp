@@ -3,7 +3,6 @@
 #include <asio.hpp>
 #include <chrono>
 #include <filesystem>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -49,10 +48,10 @@ class Controller : public core::interface::ICommandBus {
     std::mutex              mutex_;
     StateStore              store_;
 
-    std::vector<Policy>                            policies_;
-    std::filesystem::file_time_type                last_policy_file_time_;
-    std::map<core::message::MessageType, uint32_t> message_counters_;
-    bool                                           overload_mode_ = false;
+    std::vector<Policy>                                      policies_;
+    std::filesystem::file_time_type                          last_policy_file_time_;
+    std::unordered_map<core::message::MessageType, uint32_t> message_counters_;
+    bool                                                     overload_mode_ = false;
 
     std::unordered_map<uint32_t, std::shared_ptr<core::interface::IAgentComm>> sessions_;
 };
