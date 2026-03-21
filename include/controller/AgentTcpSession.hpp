@@ -22,7 +22,7 @@ class AgentTcpSession : public core::interface::IAgentComm {
     void disconnect() override;
     void updateHeartbeat();
 
-    std::shared_ptr<core::message::Message> getSetModeMsg(uint32_t mode, uint32_t header_id);
+    std::shared_ptr<core::message::Message> getSetModeMsg(uint32_t mode, uint32_t header_id) override;
 
    private:
     std::shared_ptr<core::comm::TcpComm>  conn_;
