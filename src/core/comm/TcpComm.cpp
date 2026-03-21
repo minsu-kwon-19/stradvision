@@ -100,6 +100,10 @@ void TcpComm::disconnect() {
     });
 }
 
+bool TcpComm::isConnected() const {
+    return const_cast<asio::ip::tcp::socket&>(socket_).is_open();
+}
+
 void TcpComm::setMessageHandler(MessageHandler handler) {
     msg_handler_ = handler;
 }

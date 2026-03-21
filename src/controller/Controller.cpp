@@ -125,7 +125,7 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     if (msg->header.type == MessageType::ACK) {
         AckPayload payload;
         payload.deserialize(msg->payload);
-        spdlog::info("Agent {} ACK (cmd_id: {})", session->getAgentId(), payload.cmd_id);
+        session->handleAck(payload.cmd_id);
         return;
     }
 
@@ -133,7 +133,9 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     if (msg->header.type == MessageType::NACK) {
         NackPayload payload;
         payload.deserialize(msg->payload);
-        spdlog::warn("Agent {} NACK: {}", session->getAgentId(), payload.reason);
+        spdlog::warn("Agent {} NACK (cmd_id: {}): {}", session->getAgentId(), payload.cmd_id,
+                     payload.reason);
+        session->handleAck(payload.cmd_id);  // Also remove from pending
         return;
     }
 }
@@ -147,11 +149,11 @@ void Controller::startHealthCheck() {
             std::lock_guard<std::mutex> lock(mutex_);
             for (auto it = sessions_.begin(); it != sessions_.end();) {
                 if (!it->second->isHealthy()) {
-                    spdlog::warn("Agent {} is unhealthy (Heartbeat Timeout > 3s), dropping session",
-                                 it->first);
+                    spdlog::warn("Agent {} is unhealthy, dropping session", it->first);
                     it->second->disconnect();
                     it = sessions_.erase(it);
                 } else {
+                    it->second->checkCommandTimeouts();
                     ++it;
                 }
             }
@@ -178,7 +180,9 @@ void Controller::startHealthCheck() {
                             uint32_t next_id = getNextId(MessageType::CMD_SET_MODE);
                             for (auto& [id, s] : sessions_) {
                                 if (s->isHealthy()) {
-                                    s->send(s->getSetModeMsg(policy.action.mode, next_id));
+                                    auto msg = s->getSetModeMsg(policy.action.mode, next_id);
+                                    s->trackCommand(msg);
+                                    s->send(msg);
                                 }
                             }
                         }

@@ -15,6 +15,7 @@ class TcpComm : public std::enable_shared_from_this<TcpComm> {
    public:
     explicit TcpComm(asio::io_context& ioc, asio::ip::tcp::socket socket,
                      std::shared_ptr<interface::IMessageParser> msg_parser);
+    virtual ~TcpComm() = default;
 
     using MessageHandler =
         std::function<void(std::shared_ptr<TcpComm>, std::shared_ptr<message::Message>)>;
@@ -25,12 +26,13 @@ class TcpComm : public std::enable_shared_from_this<TcpComm> {
         return std::make_shared<TcpComm>(ioc, std::move(socket), msg_parser);
     }
 
-    void setMessageHandler(MessageHandler handler);
-    void setErrorHandler(ErrorHandler handler);
+    virtual void setMessageHandler(MessageHandler handler);
+    virtual void setErrorHandler(ErrorHandler handler);
 
-    void start();
-    void send(std::shared_ptr<message::Message> msg);
-    void disconnect();
+    virtual void start();
+    virtual void send(std::shared_ptr<message::Message> msg);
+    virtual void disconnect();
+    virtual bool isConnected() const;
 
     asio::ip::tcp::socket& socket() {
         return socket_;
