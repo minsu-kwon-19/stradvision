@@ -82,6 +82,30 @@ void Agent::sendHello() {
     conn_->send(msg_hello_);
 }
 
+void Agent::sendAck(uint32_t cmd_id) {
+    payload_ack_                 = AckPayload{cmd_id};
+    msg_ack_->payload            = payload_ack_.serialize();
+    msg_ack_->header.agent_id    = agent_id_;
+    msg_ack_->header.header_id   = getNextHeaderId(MessageType::ACK);
+    msg_ack_->header.timestamp   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::system_clock::now().time_since_epoch())
+                                       .count();
+    msg_ack_->header.payload_len = static_cast<uint32_t>(msg_ack_->payload.size());
+    if (conn_) conn_->send(msg_ack_);
+}
+
+void Agent::sendNack(uint32_t cmd_id, const std::string& reason) {
+    payload_nack_                 = NackPayload{cmd_id, reason};
+    msg_nack_->payload            = payload_nack_.serialize();
+    msg_nack_->header.agent_id    = agent_id_;
+    msg_nack_->header.header_id   = getNextHeaderId(MessageType::NACK);
+    msg_nack_->header.timestamp   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::system_clock::now().time_since_epoch())
+                                        .count();
+    msg_nack_->header.payload_len = static_cast<uint32_t>(msg_nack_->payload.size());
+    if (conn_) conn_->send(msg_nack_);
+}
+
 void Agent::startReporting() {
     timer_.expires_after(std::chrono::seconds(1));
     timer_.async_wait([this](const asio::error_code& ec) {
@@ -125,48 +149,39 @@ void Agent::onMessage(std::shared_ptr<Message> msg) {
     }
 
     if (msg->header.type == MessageType::CMD_SET_MODE) {
+        if (msg->header.header_id == cmd_set_mode_header_id_) {
+            spdlog::warn(
+                "Agent {}: Duplicate CMD_SET_MODE received (header_id: {}). Rejecting with NACK.",
+                agent_id_, msg->header.header_id);
+            sendNack(msg->header.header_id, "Duplicate CMD_SET_MODE command");
+            return;
+        }
+
+        cmd_set_mode_header_id_ = msg->header.header_id;
+
         try {
             CmdSetModePayload payload;
             payload.deserialize(msg->payload);
-            current_mode_                = payload.mode;
-            last_cmd_rc_                 = 0;
-            payload_ack_                 = AckPayload{msg->header.header_id};
-            msg_ack_->payload            = payload_ack_.serialize();
-            msg_ack_->header.agent_id    = agent_id_;
-            msg_ack_->header.header_id   = getNextHeaderId(MessageType::ACK);
-            msg_ack_->header.timestamp   = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                               std::chrono::system_clock::now().time_since_epoch())
-                                               .count();
-            msg_ack_->header.payload_len = static_cast<uint32_t>(msg_ack_->payload.size());
-            conn_->send(msg_ack_);
+            current_mode_ = payload.mode;
+            last_cmd_rc_  = 0;
+
+            sendAck(msg->header.header_id);
         } catch (const std::exception& e) {
-            last_cmd_rc_                  = -1;
-            payload_nack_                 = NackPayload{msg->header.header_id, e.what()};
-            msg_nack_->payload            = payload_nack_.serialize();
-            msg_nack_->header.agent_id    = agent_id_;
-            msg_nack_->header.header_id   = getNextHeaderId(MessageType::NACK);
-            msg_nack_->header.timestamp   = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                std::chrono::system_clock::now().time_since_epoch())
-                                                .count();
-            msg_nack_->header.payload_len = static_cast<uint32_t>(msg_nack_->payload.size());
-            conn_->send(msg_nack_);
+            last_cmd_rc_ = -1;
+            sendNack(msg->header.header_id, e.what());
         }
     } else {
         spdlog::warn("Unknown message type: {}", (int)msg->header.type);
-        payload_nack_                 = NackPayload{msg->header.header_id, "Unknown message type"};
-        msg_nack_->payload            = payload_nack_.serialize();
-        msg_nack_->header.agent_id    = agent_id_;
-        msg_nack_->header.header_id   = getNextHeaderId(MessageType::NACK);
-        msg_nack_->header.timestamp   = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                            std::chrono::system_clock::now().time_since_epoch())
-                                            .count();
-        msg_nack_->header.payload_len = static_cast<uint32_t>(msg_nack_->payload.size());
-        conn_->send(msg_nack_);
+        sendNack(msg->header.header_id, "Unknown message type");
     }
 }
 
 uint32_t Agent::getNextHeaderId(core::message::MessageType type) {
     return message_counters_[type]++;
+}
+
+uint32_t Agent::getCurrentMode() const {
+    return current_mode_;
 }
 
 }  // namespace agent

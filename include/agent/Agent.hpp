@@ -16,9 +16,13 @@ class Agent {
     explicit Agent(asio::io_context& ioc, uint32_t agent_id);
     void start(const std::string& host, const std::string& port);
 
+    uint32_t getCurrentMode() const;
+
    private:
     void sendHello();
     void startReporting();
+    void sendAck(uint32_t cmd_id);
+    void sendNack(uint32_t cmd_id, const std::string& reason);
     void onMessage(std::shared_ptr<core::message::Message> msg);
 
     void handleConnectionError(const std::string& msg);
@@ -41,6 +45,8 @@ class Agent {
 
     int       retry_count_ = 0;
     const int MAX_RETRIES  = 3;
+
+    uint32_t cmd_set_mode_header_id_ = 0xFFFFFFFF;
 
     core::message::HelloPayload     payload_hello_;
     core::message::HeartbeatPayload payload_hb_;

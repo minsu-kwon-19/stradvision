@@ -22,14 +22,17 @@ void MockFaultyComm::send(std::shared_ptr<Message> msg) {
 
     // Simulate success only on the 4th attempt
     if (receive_count_ >= 4) {
-        spdlog::info("[MockComm] SUCCESS! Sending ACK for ID: {}", last_received_id_);
+        spdlog::info("[MockComm] SUCCESS! Queueing ACK for ID: {}", last_received_id_);
         if (handler_) {
             auto       ack_msg = std::make_shared<Message>(MessageType::ACK);
             AckPayload payload{last_received_id_};
             ack_msg->payload         = payload.serialize();
             ack_msg->header.agent_id = 1;  // From Agent 1
 
-            handler_(shared_from_this(), ack_msg);
+            // Defer execution to avoid locking deadlocks in synchronous tests
+            asio::post(socket().get_executor(), [this, ack_msg]() {
+                handler_(shared_from_this(), ack_msg);
+            });
         }
     } else {
         spdlog::warn("[MockComm] Ignoring command (Attempt {}/4)", receive_count_);
