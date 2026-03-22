@@ -13,6 +13,8 @@
 #include "controller/AgentTcpSession.hpp"
 #include "controller/StateStore.hpp"
 #include "controller/policy/Policy.hpp"
+#include "controller/MetricsTracker.hpp"
+#include "controller/MetricsServer.hpp"
 #include "core/interface/IAgentComm.hpp"
 #include "core/interface/ICommandBus.hpp"
 #include "core/message/MessageType.hpp"
@@ -58,6 +60,9 @@ class Controller : public core::interface::ICommandBus {
     std::unordered_map<core::message::MessageType, uint32_t> message_counters_;
     bool                                                     overload_mode_ = false;
     bool                                                     is_shutting_down_ = false;
+
+    std::shared_ptr<MetricsTracker> metrics_tracker_;
+    std::unique_ptr<MetricsServer>  metrics_server_;
 
     std::unordered_map<uint32_t, std::shared_ptr<core::interface::IAgentComm>> sessions_;
 };

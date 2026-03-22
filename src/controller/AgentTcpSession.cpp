@@ -9,8 +9,9 @@ namespace controller {
 using namespace core::pool;
 using namespace core::message;
 
-AgentTcpSession::AgentTcpSession(std::shared_ptr<core::comm::TcpComm> conn)
-    : conn_(std::move(conn)) {
+AgentTcpSession::AgentTcpSession(std::shared_ptr<core::comm::TcpComm> conn,
+                                 std::shared_ptr<MetricsTracker>      tracker)
+    : conn_(std::move(conn)), tracker_(std::move(tracker)) {
     msg_set_mode_ = MessagePool::getInstance().acquire(MessageType::CMD_SET_MODE);
 }
 
@@ -78,9 +79,17 @@ void AgentTcpSession::handleAck(uint32_t cmd_id) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto                        it = pending_cmds_.find(cmd_id);
     if (it != pending_cmds_.end()) {
-        spdlog::info("Agent {}: Command 0x{:04x} (ID: {}) ACKed after {} retries", id_,
+        auto now = std::chrono::steady_clock::now();
+        auto rtt = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.last_send)
+                       .count();
+        if (tracker_) {
+            tracker_->total_rtt_ms.fetch_add(rtt);
+            tracker_->rtt_samples.fetch_add(1);
+        }
+
+        spdlog::info("Agent {}: Command 0x{:04x} (ID: {}) ACKed after {} retries (RTT: {}ms)", id_,
                      static_cast<uint16_t>(it->second.msg->header.type), cmd_id,
-                     it->second.retry_count);
+                     it->second.retry_count, rtt);
         pending_cmds_.erase(it);
     }
 }
@@ -121,6 +130,9 @@ void AgentTcpSession::checkCommandTimeouts() {
                     "Dropping session.",
                     id_, static_cast<uint16_t>(pc.msg->header.type), pc.msg->header.header_id,
                     MAX_RETRIES);
+                if (tracker_) {
+                    tracker_->command_failures.fetch_add(1);
+                }
                 it = pending_cmds_.erase(it);
                 if (conn_) {
                     conn_->disconnect();

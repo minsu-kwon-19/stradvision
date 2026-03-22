@@ -16,6 +16,7 @@ int main(int argc, char* argv[]) {
         std::string port     = argv[2];
         uint32_t    agent_id = std::stoul(argv[3]);
 
+        spdlog::set_pattern("{\"time\": \"%Y-%m-%dT%H:%M:%S.%f%z\", \"level\": \"%l\", \"thread\": %t, \"message\": \"%v\"}");
         spdlog::set_level(spdlog::level::debug);
         spdlog::info("Starting Agent {} targeting {}:{}", agent_id, host, port);
 

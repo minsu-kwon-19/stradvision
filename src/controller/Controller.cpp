@@ -19,7 +19,9 @@ Controller::Controller(asio::io_context& ioc, short port)
     : ioc_(ioc),
       acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
       timer_(ioc),
-      signals_(ioc, SIGINT, SIGTERM) {
+      signals_(ioc, SIGINT, SIGTERM),
+      metrics_tracker_(std::make_shared<MetricsTracker>()),
+      metrics_server_(std::make_unique<MetricsServer>(ioc, 9090, metrics_tracker_)) {
     loadPolicies();
     doAccept();
     startHealthCheck();
@@ -56,8 +58,13 @@ void Controller::doAccept() {
     acceptor_.async_accept([this](const asio::error_code& ec, asio::ip::tcp::socket socket) {
         if (!ec) {
             spdlog::info("Accepted new connection");
+            
+            auto parser = std::make_shared<BinaryMessageParser>();
             auto conn =
-                TcpComm::create(ioc_, std::move(socket), std::make_shared<BinaryMessageParser>());
+                TcpComm::create(ioc_, std::move(socket), parser);
+            auto session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
+
+            metrics_tracker_->active_connections.fetch_add(1);
 
             conn->setMessageHandler([this](auto c, auto m) { onMessage(c, m); });
             conn->setErrorHandler([this](auto c, auto e) {
@@ -69,6 +76,7 @@ void Controller::doAccept() {
                         sessions_.erase(s->getAgentId());
                     }
                 }
+                metrics_tracker_->active_connections.fetch_sub(1);
             });
 
             conn->start();
@@ -90,7 +98,7 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
             payload.deserialize(msg->payload);
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                auto                        new_session = std::make_shared<AgentTcpSession>(conn);
+                auto                        new_session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
                 new_session->setAgentId(payload.agent_id);
                 sessions_[payload.agent_id] = new_session;
                 conn->setContext(new_session);
@@ -161,6 +169,7 @@ void Controller::startHealthCheck() {
                 if (!it->second->isHealthy()) {
                     spdlog::warn("Agent {} is unhealthy, dropping session", it->first);
                     it->second->disconnect();
+                    metrics_tracker_->active_connections.fetch_sub(1);
                     it = sessions_.erase(it);
                 } else {
                     it->second->checkCommandTimeouts();
@@ -266,7 +275,7 @@ void Controller::checkPolicyUpdate() {
 void Controller::handleSignals() {
     signals_.async_wait([this](asio::error_code ec, int signo) {
         if (!ec) {
-            spdlog::info("Received signal {}. Initiating Graceful Shutdown...", signo);
+            spdlog::info("Received signal {}. Initiating Shutdown...", signo);
             shutdownController();
         }
     });
@@ -279,6 +288,7 @@ void Controller::shutdownController() {
     is_shutting_down_ = true;
 
     asio::error_code ec;
+    metrics_server_.reset();
     acceptor_.cancel(ec);
     timer_.cancel();
 
