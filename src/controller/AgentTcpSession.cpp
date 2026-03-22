@@ -42,6 +42,24 @@ void AgentTcpSession::disconnect() {
     }
 }
 
+void AgentTcpSession::flushPendingCommands() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (pending_cmds_.empty()) {
+        if (conn_) conn_->flushAndDisconnect();
+        return;
+    }
+    spdlog::info("Agent {}: Flushing {} pending commands before shutdown.", id_, pending_cmds_.size());
+    for (auto& pair : pending_cmds_) {
+        if (conn_) {
+            conn_->send(pair.second.msg);
+        }
+    }
+    if (conn_) {
+        conn_->flushAndDisconnect();
+    }
+    pending_cmds_.clear();
+}
+
 void AgentTcpSession::updateHeartbeat() {
     last_heartbeat_ = std::chrono::steady_clock::now();
 }

@@ -32,6 +32,7 @@ class TcpComm : public std::enable_shared_from_this<TcpComm> {
     virtual void start();
     virtual void send(std::shared_ptr<message::Message> msg);
     virtual void disconnect();
+    virtual void flushAndDisconnect();
     virtual bool isConnected() const;
 
     asio::ip::tcp::socket& socket() {
@@ -56,6 +57,8 @@ class TcpComm : public std::enable_shared_from_this<TcpComm> {
 
     MessageHandler msg_handler_;
     ErrorHandler   err_handler_;
+
+    bool is_shutting_down_ = false;
 
     std::any                                   user_context_;
     std::shared_ptr<interface::IMessageParser> msg_parser_;

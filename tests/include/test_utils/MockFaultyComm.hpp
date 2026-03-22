@@ -24,6 +24,7 @@ class MockFaultyComm : public core::comm::TcpComm {
     bool isConnected() const override;
     void start() override;
     void disconnect() override;
+    void flushPendingCommands() override;
 
    private:
     MessageHandler handler_;

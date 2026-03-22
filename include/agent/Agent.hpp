@@ -1,7 +1,8 @@
 #pragma once
 
 #include <asio.hpp>
-#include <memory>
+#include <asio/signal_set.hpp>
+#include <chrono>
 #include <random>
 #include <string>
 #include <unordered_map>
@@ -21,8 +22,12 @@ class Agent {
    private:
     void sendHello();
     void startReporting();
+    void startCommandRetryTimer();
     void sendAck(uint32_t cmd_id);
     void sendNack(uint32_t cmd_id, const std::string& reason);
+
+    void handleSignals();
+    void shutdownAgent();
     void onMessage(std::shared_ptr<core::message::Message> msg);
 
     void handleConnectionError(const std::string& msg);
@@ -32,13 +37,18 @@ class Agent {
     asio::io_context&       ioc_;
     asio::ip::tcp::resolver resolver_;
     asio::ip::tcp::socket   socket_;
-    asio::steady_timer      timer_;
-
     std::shared_ptr<core::comm::TcpComm> conn_;
+    asio::steady_timer                   timer_;
+    asio::steady_timer                   retry_timer_;
+    asio::signal_set                     signals_;
 
     uint32_t agent_id_;
-    uint32_t current_mode_ = 0;
-    int32_t  last_cmd_rc_  = 0;
+    uint32_t current_mode_;
+    float    cpu_load_;
+    float    temperature_;
+    int32_t  last_err_code_;
+
+    bool is_shutting_down_ = false;
 
     std::string host_;
     std::string port_;

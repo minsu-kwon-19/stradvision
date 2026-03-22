@@ -24,3 +24,8 @@ gtest_discover_tests(duplicate_message_test)
 add_executable(message_parser_test src/MessageParserTest.cpp)
 target_link_libraries(message_parser_test PRIVATE core_lib GTest::gtest_main spdlog::spdlog)
 gtest_discover_tests(message_parser_test)
+
+# Core Unit Tests (Payload Serialization, Session Timeouts, etc)
+add_executable(unit_tests src/PayloadTest.cpp src/SessionTimeoutTest.cpp ../src/controller/AgentTcpSession.cpp)
+target_link_libraries(unit_tests PRIVATE controller_lib core_lib GTest::gtest_main spdlog::spdlog)
+gtest_discover_tests(unit_tests)

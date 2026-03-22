@@ -51,6 +51,11 @@ void MockFaultyComm::start() {
 }
 
 void MockFaultyComm::disconnect() {
+    is_connected_ = false;
+}
+
+void MockFaultyComm::flushPendingCommands() {
+    // No-op for mock
 }
 
 }  // namespace utils

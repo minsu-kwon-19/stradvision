@@ -29,6 +29,7 @@ class AgentTcpSession : public core::interface::IAgentComm {
     bool isHealthy() const override;
     void disconnect() override;
     void updateHeartbeat();
+    void flushPendingCommands();
 
     std::shared_ptr<core::message::Message> getSetModeMsg(uint32_t mode, uint32_t header_id) override;
 

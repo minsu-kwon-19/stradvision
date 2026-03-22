@@ -16,10 +16,14 @@ using namespace core::comm;
 namespace controller {
 
 Controller::Controller(asio::io_context& ioc, short port)
-    : ioc_(ioc), acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)), timer_(ioc) {
+    : ioc_(ioc),
+      acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
+      timer_(ioc),
+      signals_(ioc, SIGINT, SIGTERM) {
     loadPolicies();
     doAccept();
     startHealthCheck();
+    handleSignals();
 
     auto endpoint = acceptor_.local_endpoint();
 
@@ -46,6 +50,9 @@ void Controller::sendCommandTo(uint32_t agent_id, std::shared_ptr<Message> msg) 
 }
 
 void Controller::doAccept() {
+    if (is_shutting_down_) {
+        return;
+    }
     acceptor_.async_accept([this](const asio::error_code& ec, asio::ip::tcp::socket socket) {
         if (!ec) {
             spdlog::info("Accepted new connection");
@@ -141,7 +148,10 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
 }
 
 void Controller::startHealthCheck() {
-    timer_.expires_after(std::chrono::seconds(1));
+    if (is_shutting_down_) {
+        return;
+    }
+    timer_.expires_after(std::chrono::seconds(2));
     timer_.async_wait([this](const asio::error_code& ec) {
         if (!ec) {
             checkPolicyUpdate();
@@ -250,6 +260,31 @@ void Controller::checkPolicyUpdate() {
             }
         }
     } catch (...) {
+    }
+}
+
+void Controller::handleSignals() {
+    signals_.async_wait([this](asio::error_code ec, int signo) {
+        if (!ec) {
+            spdlog::info("Received signal {}. Initiating Graceful Shutdown...", signo);
+            shutdownController();
+        }
+    });
+}
+
+void Controller::shutdownController() {
+    if (is_shutting_down_) {
+        return;
+    }
+    is_shutting_down_ = true;
+
+    asio::error_code ec;
+    acceptor_.cancel(ec);
+    timer_.cancel();
+
+    spdlog::info("Flushing pending commands for all {} sessions...", sessions_.size());
+    for (auto& [id, session] : sessions_) {
+        session->flushPendingCommands();
     }
 }
 

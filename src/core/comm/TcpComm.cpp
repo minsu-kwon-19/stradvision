@@ -79,25 +79,47 @@ void TcpComm::send(std::shared_ptr<message::Message> msg) {
 void TcpComm::writePump() {
     auto self(shared_from_this());
     asio::async_write(socket_, asio::buffer(write_queue_.front()),
-                      [self](const asio::error_code& ec, std::size_t /*bytes_transferred*/) {
-                          if (!ec) {
-                              self->write_queue_.erase(self->write_queue_.begin());
-                              if (!self->write_queue_.empty()) {
-                                  self->writePump();
-                              }
-                          } else {
-                              if (self->err_handler_) {
-                                  self->err_handler_(self, ec);
-                              }
-                          }
-                      });
+                      [self](std::error_code ec, std::size_t /*length*/) {
+            if (!ec) {
+                if (!self->write_queue_.empty()) {
+                    self->write_queue_.erase(self->write_queue_.begin());
+                }
+                if (!self->write_queue_.empty()) {
+                    self->writePump();
+                } else if (self->is_shutting_down_) {
+                    asio::error_code close_ec;
+                    if (self->socket_.is_open()) {
+                        self->socket_.shutdown(asio::ip::tcp::socket::shutdown_both, close_ec);
+                        self->socket_.close(close_ec);
+                    }
+                }
+            } else {
+                if (self->err_handler_) {
+                    self->err_handler_(self, ec);
+                }
+            }
+        });
 }
 
 void TcpComm::disconnect() {
     auto self(shared_from_this());
-    asio::post(socket_.get_executor(), [self]() {
+    asio::post(socket_.get_executor(), [self]() mutable {
         asio::error_code ec;
-        self->socket_.close(ec);
+        if (self->socket_.is_open()) {
+            self->socket_.close(ec);
+        }
+    });
+}
+
+void TcpComm::flushAndDisconnect() {
+    auto self(shared_from_this());
+    asio::post(socket_.get_executor(), [self]() mutable {
+        self->is_shutting_down_ = true;
+        if (self->write_queue_.empty() && self->socket_.is_open()) {
+            asio::error_code ec;
+            self->socket_.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+            self->socket_.close(ec);
+        }
     });
 }
 

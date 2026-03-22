@@ -12,7 +12,7 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# FetchContent for ASIO, GTest, Spdlog
+# FetchContent for ASIO, GTest, Spdlog, nlohmann/json
 include(FetchContent)
 
 # Asio (standalone)
