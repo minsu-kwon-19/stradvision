@@ -1,6 +1,7 @@
+#include "controller/AgentTcpSession.hpp"
+
 #include <spdlog/spdlog.h>
 
-#include "controller/AgentTcpSession.hpp"
 #include "core/pool/MessagePool.hpp"
 
 namespace controller {
@@ -10,7 +11,7 @@ using namespace core::message;
 
 AgentTcpSession::AgentTcpSession(std::shared_ptr<core::comm::TcpComm> conn)
     : conn_(std::move(conn)) {
-    msg_set_mode_ = MessagePool::getInstance().acquire(MessageType::HELLO);
+    msg_set_mode_ = MessagePool::getInstance().acquire(MessageType::CMD_SET_MODE);
 }
 
 void AgentTcpSession::send(std::shared_ptr<core::message::Message> msg) {
@@ -48,7 +49,8 @@ void AgentTcpSession::flushPendingCommands() {
         if (conn_) conn_->flushAndDisconnect();
         return;
     }
-    spdlog::info("Agent {}: Flushing {} pending commands before shutdown.", id_, pending_cmds_.size());
+    spdlog::info("Agent {}: Flushing {} pending commands before shutdown.", id_,
+                 pending_cmds_.size());
     for (auto& pair : pending_cmds_) {
         if (conn_) {
             conn_->send(pair.second.msg);
@@ -65,11 +67,10 @@ void AgentTcpSession::updateHeartbeat() {
 }
 
 std::shared_ptr<Message> AgentTcpSession::getSetModeMsg(uint32_t mode, uint32_t header_id) {
-    payload_set_mode_.mode          = mode;
-    msg_set_mode_->payload          = payload_set_mode_.serialize();
-    msg_set_mode_->header.header_id = header_id;
-    msg_set_mode_->header.payload_len =
-        static_cast<uint32_t>(msg_set_mode_->payload.size());
+    payload_set_mode_.mode            = mode;
+    msg_set_mode_->payload            = payload_set_mode_.serialize();
+    msg_set_mode_->header.header_id   = header_id;
+    msg_set_mode_->header.payload_len = static_cast<uint32_t>(msg_set_mode_->payload.size());
     return msg_set_mode_;
 }
 
@@ -86,10 +87,10 @@ void AgentTcpSession::handleAck(uint32_t cmd_id) {
 
 void AgentTcpSession::trackCommand(std::shared_ptr<core::message::Message> msg) {
     std::lock_guard<std::mutex> lock(mutex_);
-    PendingCommand pc;
-    pc.msg         = msg;
-    pc.last_send   = std::chrono::steady_clock::now();
-    pc.retry_count = 0;
+    PendingCommand              pc;
+    pc.msg                               = msg;
+    pc.last_send                         = std::chrono::steady_clock::now();
+    pc.retry_count                       = 0;
     pending_cmds_[msg->header.header_id] = pc;
 }
 
@@ -107,9 +108,9 @@ void AgentTcpSession::checkCommandTimeouts() {
             if (pc.retry_count < MAX_RETRIES) {
                 pc.retry_count++;
                 pc.last_send = now;
-                spdlog::warn("Agent {}: Resending command 0x{:04x} (ID: {}), attempt {}/{}",
-                             id_, static_cast<uint16_t>(pc.msg->header.type),
-                             pc.msg->header.header_id, pc.retry_count, MAX_RETRIES);
+                spdlog::warn("Agent {}: Resending command 0x{:04x} (ID: {}), attempt {}/{}", id_,
+                             static_cast<uint16_t>(pc.msg->header.type), pc.msg->header.header_id,
+                             pc.retry_count, MAX_RETRIES);
                 if (conn_) {
                     conn_->send(pc.msg);
                 }
@@ -118,8 +119,8 @@ void AgentTcpSession::checkCommandTimeouts() {
                 spdlog::error(
                     "Agent {}: Command 0x{:04x} (ID: {}) failed after {} retries. "
                     "Dropping session.",
-                    id_, static_cast<uint16_t>(pc.msg->header.type),
-                    pc.msg->header.header_id, MAX_RETRIES);
+                    id_, static_cast<uint16_t>(pc.msg->header.type), pc.msg->header.header_id,
+                    MAX_RETRIES);
                 it = pending_cmds_.erase(it);
                 if (conn_) {
                     conn_->disconnect();

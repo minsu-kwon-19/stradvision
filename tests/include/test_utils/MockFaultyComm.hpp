@@ -24,12 +24,12 @@ class MockFaultyComm : public core::comm::TcpComm {
     bool isConnected() const override;
     void start() override;
     void disconnect() override;
-    void flushPendingCommands() override;
 
    private:
     MessageHandler handler_;
     int            receive_count_    = 0;
     uint32_t       last_received_id_ = 0;
+    bool           is_connected_     = false;
 };
 
 }  // namespace utils

@@ -14,7 +14,13 @@ using namespace core::pool;
 namespace agent {
 
 Agent::Agent(asio::io_context& ioc, uint32_t agent_id)
-    : ioc_(ioc), resolver_(ioc), socket_(ioc), timer_(ioc), retry_timer_(ioc), signals_(ioc, SIGINT, SIGTERM), agent_id_(agent_id) {
+    : ioc_(ioc),
+      resolver_(ioc),
+      socket_(ioc),
+      timer_(ioc),
+      retry_timer_(ioc),
+      signals_(ioc, SIGINT, SIGTERM),
+      agent_id_(agent_id) {
     msg_hello_ = MessagePool::getInstance().acquire(MessageType::HELLO);
     msg_hb_    = MessagePool::getInstance().acquire(MessageType::HEARTBEAT);
     msg_state_ = MessagePool::getInstance().acquire(MessageType::STATE);
@@ -38,7 +44,7 @@ void Agent::start(const std::string& host, const std::string& port) {
                                                std::make_shared<BinaryMessageParser>());
                 conn_->setMessageHandler([this](auto /*c*/, auto m) { onMessage(m); });
                 conn_->setErrorHandler(
-                    [this](auto c, auto e) { handleConnectionError(e.message()); });
+                    [this](auto /*c*/, auto e) { handleConnectionError(e.message()); });
                 conn_->start();
                 sendHello();
                 startReporting();
@@ -189,7 +195,7 @@ uint32_t Agent::getCurrentMode() const {
 void Agent::handleSignals() {
     signals_.async_wait([this](asio::error_code ec, int signo) {
         if (!ec) {
-            spdlog::info("Agent {}: Received signal {}. Initiating Graceful Shutdown...", agent_id_, signo);
+            spdlog::info("Agent {}: Received signal {}. Initiating Shutdown...", agent_id_, signo);
             shutdownAgent();
         }
     });

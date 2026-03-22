@@ -43,10 +43,10 @@ class Agent {
     asio::signal_set                     signals_;
 
     uint32_t agent_id_;
-    uint32_t current_mode_;
-    float    cpu_load_;
-    float    temperature_;
-    int32_t  last_err_code_;
+    uint32_t current_mode_ = 0;
+    float    cpu_load_ = 0.0f;
+    float    temperature_ = 0.0f;
+    int32_t  last_cmd_rc_ = 0;
 
     bool is_shutting_down_ = false;
 

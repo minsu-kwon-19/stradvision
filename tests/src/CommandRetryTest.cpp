@@ -40,7 +40,7 @@ TEST_F(CommandRetryTest, ExponentialBackoffTest) {
     session->setAgentId(1);
     session->updateHeartbeat();
 
-    mock_comm->setMessageHandler([&](auto conn, auto msg) {
+    mock_comm->setMessageHandler([&](auto /*conn*/, auto msg) {
         spdlog::info("[Test] Simulating ACK reception in Controller for Agent {}",
                      session->getAgentId());
 

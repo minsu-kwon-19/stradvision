@@ -30,9 +30,8 @@ void MockFaultyComm::send(std::shared_ptr<Message> msg) {
             ack_msg->header.agent_id = 1;  // From Agent 1
 
             // Defer execution to avoid locking deadlocks in synchronous tests
-            asio::post(socket().get_executor(), [this, ack_msg]() {
-                handler_(shared_from_this(), ack_msg);
-            });
+            asio::post(socket().get_executor(),
+                       [this, ack_msg]() { handler_(shared_from_this(), ack_msg); });
         }
     } else {
         spdlog::warn("[MockComm] Ignoring command (Attempt {}/4)", receive_count_);
@@ -52,10 +51,6 @@ void MockFaultyComm::start() {
 
 void MockFaultyComm::disconnect() {
     is_connected_ = false;
-}
-
-void MockFaultyComm::flushPendingCommands() {
-    // No-op for mock
 }
 
 }  // namespace utils
