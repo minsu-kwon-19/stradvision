@@ -4,7 +4,6 @@
 
 #include "agent/Agent.hpp"
 
-
 int main(int argc, char* argv[]) {
     try {
         if (argc != 4) {
@@ -16,6 +15,8 @@ int main(int argc, char* argv[]) {
         std::string port     = argv[2];
         uint32_t    agent_id = std::stoul(argv[3]);
 
+        spdlog::set_pattern(
+            "{\"time\": \"%Y-%m-%dT%H:%M:%S.%f%z\", \"level\": \"%l\", \"message\": \"%v\"}");
         spdlog::set_level(spdlog::level::debug);
         spdlog::info("Starting Agent {} targeting {}:{}", agent_id, host, port);
 

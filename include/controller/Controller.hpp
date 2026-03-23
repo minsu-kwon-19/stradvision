@@ -1,6 +1,7 @@
 #pragma once
 
 #include <asio.hpp>
+#include <asio/signal_set.hpp>
 #include <chrono>
 #include <filesystem>
 #include <memory>
@@ -10,11 +11,14 @@
 #include <vector>
 
 #include "controller/AgentTcpSession.hpp"
+#include "controller/MetricsServer.hpp"
+#include "controller/MetricsTracker.hpp"
 #include "controller/StateStore.hpp"
 #include "controller/policy/Policy.hpp"
 #include "core/interface/IAgentComm.hpp"
 #include "core/interface/ICommandBus.hpp"
 #include "core/message/MessageType.hpp"
+
 
 namespace controller {
 
@@ -29,6 +33,16 @@ class Controller : public core::interface::ICommandBus {
         return store_;
     }
 
+    void clearPolicies() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        policies_.clear();
+    }
+
+    void addPolicy(const Policy& p) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        policies_.push_back(p);
+    }
+
    private:
     void doAccept();
     void onMessage(std::shared_ptr<core::comm::TcpComm>    conn,
@@ -38,6 +52,9 @@ class Controller : public core::interface::ICommandBus {
     void loadPolicies();
     void checkPolicyUpdate();
 
+    void handleSignals();
+    void shutdownController();
+
     uint32_t getNextId(core::message::MessageType type) {
         return message_counters_[type]++;
     }
@@ -45,13 +62,18 @@ class Controller : public core::interface::ICommandBus {
     asio::io_context&       ioc_;
     asio::ip::tcp::acceptor acceptor_;
     asio::steady_timer      timer_;
+    asio::signal_set        signals_;
     std::mutex              mutex_;
     StateStore              store_;
 
     std::vector<Policy>                                      policies_;
     std::filesystem::file_time_type                          last_policy_file_time_;
     std::unordered_map<core::message::MessageType, uint32_t> message_counters_;
-    bool                                                     overload_mode_ = false;
+    bool                                                     overload_mode_    = false;
+    bool                                                     is_shutting_down_ = false;
+
+    std::shared_ptr<MetricsTracker> metrics_tracker_;
+    std::unique_ptr<MetricsServer>  metrics_server_;
 
     std::unordered_map<uint32_t, std::shared_ptr<core::interface::IAgentComm>> sessions_;
 };

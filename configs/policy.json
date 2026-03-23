@@ -5,7 +5,7 @@
       "condition": {
         "metric": "average_load",
         "operator": ">",
-        "threshold": 80.0
+        "threshold": 60.0
       },
       "action": {
         "command": "CMD_SET_MODE",
@@ -17,7 +17,7 @@
       "condition": {
         "metric": "average_load",
         "operator": "<",
-        "threshold": 50.0
+        "threshold": 40.0
       },
       "action": {
         "command": "CMD_SET_MODE",

@@ -15,8 +15,12 @@ class IAgentComm {
     virtual uint32_t getAgentId() const                          = 0;
     virtual bool     isHealthy() const                           = 0;
     virtual void     disconnect()                                = 0;
+    virtual void     flushPendingCommands()                      = 0;
 
     virtual std::shared_ptr<message::Message> getSetModeMsg(uint32_t mode, uint32_t header_id) = 0;
+    virtual void                             handleAck(uint32_t cmd_id)                      = 0;
+    virtual void                             checkCommandTimeouts()                          = 0;
+    virtual void                             trackCommand(std::shared_ptr<message::Message> msg) = 0;
 };
 
 }  // namespace interface
