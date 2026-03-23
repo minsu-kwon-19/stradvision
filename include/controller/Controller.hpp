@@ -11,13 +11,14 @@
 #include <vector>
 
 #include "controller/AgentTcpSession.hpp"
+#include "controller/MetricsServer.hpp"
+#include "controller/MetricsTracker.hpp"
 #include "controller/StateStore.hpp"
 #include "controller/policy/Policy.hpp"
-#include "controller/MetricsTracker.hpp"
-#include "controller/MetricsServer.hpp"
 #include "core/interface/IAgentComm.hpp"
 #include "core/interface/ICommandBus.hpp"
 #include "core/message/MessageType.hpp"
+
 
 namespace controller {
 
@@ -68,7 +69,7 @@ class Controller : public core::interface::ICommandBus {
     std::vector<Policy>                                      policies_;
     std::filesystem::file_time_type                          last_policy_file_time_;
     std::unordered_map<core::message::MessageType, uint32_t> message_counters_;
-    bool                                                     overload_mode_ = false;
+    bool                                                     overload_mode_    = false;
     bool                                                     is_shutting_down_ = false;
 
     std::shared_ptr<MetricsTracker> metrics_tracker_;

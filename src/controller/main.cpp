@@ -4,7 +4,6 @@
 
 #include "controller/Controller.hpp"
 
-
 int main(int argc, char* argv[]) {
     try {
         short port = 9000;

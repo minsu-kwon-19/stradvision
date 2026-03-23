@@ -58,10 +58,9 @@ void Controller::doAccept() {
     acceptor_.async_accept([this](const asio::error_code& ec, asio::ip::tcp::socket socket) {
         if (!ec) {
             spdlog::info("Accepted new connection");
-            
-            auto parser = std::make_shared<BinaryMessageParser>();
-            auto conn =
-                TcpComm::create(ioc_, std::move(socket), parser);
+
+            auto parser  = std::make_shared<BinaryMessageParser>();
+            auto conn    = TcpComm::create(ioc_, std::move(socket), parser);
             auto session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
 
             metrics_tracker_->active_connections.fetch_add(1);
@@ -71,14 +70,16 @@ void Controller::doAccept() {
                 spdlog::warn("Connection closed: {}", e.message());
                 if (c->getContext().has_value()) {
                     try {
-                        auto weak_s = std::any_cast<std::weak_ptr<AgentTcpSession>>(c->getContext());
+                        auto weak_s =
+                            std::any_cast<std::weak_ptr<AgentTcpSession>>(c->getContext());
                         if (auto s = weak_s.lock()) {
                             if (s->getAgentId() != 0) {
                                 std::lock_guard<std::mutex> lock(mutex_);
                                 sessions_.erase(s->getAgentId());
                             }
                         }
-                    } catch (const std::bad_any_cast&) {}
+                    } catch (const std::bad_any_cast&) {
+                    }
                 }
                 metrics_tracker_->active_connections.fetch_sub(1);
             });
@@ -94,8 +95,9 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     if (conn->getContext().has_value()) {
         try {
             auto weak_s = std::any_cast<std::weak_ptr<AgentTcpSession>>(conn->getContext());
-            session = weak_s.lock();
-        } catch (const std::bad_any_cast&) {}
+            session     = weak_s.lock();
+        } catch (const std::bad_any_cast&) {
+        }
     }
 
     // Registration step
