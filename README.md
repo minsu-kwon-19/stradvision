@@ -2,20 +2,20 @@
 
 에이전트로부터 상태 정보를 수집하고 정책에 따라 명령을 내리는 컨트롤러가 존재하는 시스템
 
-## 📋 핵심 기능
+## 핵심 기능
 
 - **비동기 통신**: `asio` 기반의 non-blocking TCP 통신
 - **실시간 모니터팅**: Prometheus 형식의 메트릭 노출 (Port 9090)
 - **구조화된 로깅**: 분석이 용이한 JSON 라인 로깅
 - **안전성 검증**: AddressSanitizer(ASan) 및 UBSan 통합
 
-## 🛠️ 의존성 및 빌드 환경
+## 의존성 및 빌드 환경
 
 - **Compiler**: C++17 지원 컴파일러 (gcc/clang)
 - **Dependencies**: `asio`, `spdlog`, `nlohmann_json`, `gtest`
 - **Build System**: CMake 3.10+
 
-## 🚀 실행 방법 (Docker 사용)
+## 실행 방법 (Docker 사용)
 
 ```bash
 # 전체 시스템 빌드 및 실행 (Controller + Agents)
@@ -25,7 +25,7 @@ docker-compose -f docker/docker-compose.yml up --build
 bash scripts/run_system_asan.sh
 ```
 
-## 🧪 테스트 상세 명세 (Test Specifications)
+## 테스트 상세 명세 (Test Specifications)
 
 각 테스트 파일은 시스템의 특정 시나리오와 안정성을 검증합니다.
 
@@ -38,7 +38,7 @@ bash scripts/run_system_asan.sh
 | **세션 관리** | `SessionTimeoutTest.cpp` | `run_unit_tests.sh` | 하트비트가 끊긴 불량 에이전트를 컨트롤러가 5초(3회 시도) 내에 감지하고 연결 해제하는지 검증 |
 | **시나리오 통합** | `IntegrationTest.cpp` | `run_integration_test.sh` | 컨트롤러에 정책 주입 -> 상태 수집 -> 부하 임계치 도달 -> 모든 에이전트 모드 변경 하달 및 ACK 확인까지의 전체 사이클 검증 |
 
-## 🛡️ 동적 분석 (Sanitizers)
+## 동적 분석 (Sanitizers)
 
 ### 실행 방법
 
