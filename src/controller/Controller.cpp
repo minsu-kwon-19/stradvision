@@ -70,11 +70,15 @@ void Controller::doAccept() {
             conn->setErrorHandler([this](auto c, auto e) {
                 spdlog::warn("Connection closed: {}", e.message());
                 if (c->getContext().has_value()) {
-                    auto s = std::any_cast<std::shared_ptr<AgentTcpSession>>(c->getContext());
-                    if (s && s->getAgentId() != 0) {
-                        std::lock_guard<std::mutex> lock(mutex_);
-                        sessions_.erase(s->getAgentId());
-                    }
+                    try {
+                        auto weak_s = std::any_cast<std::weak_ptr<AgentTcpSession>>(c->getContext());
+                        if (auto s = weak_s.lock()) {
+                            if (s->getAgentId() != 0) {
+                                std::lock_guard<std::mutex> lock(mutex_);
+                                sessions_.erase(s->getAgentId());
+                            }
+                        }
+                    } catch (const std::bad_any_cast&) {}
                 }
                 metrics_tracker_->active_connections.fetch_sub(1);
             });
@@ -88,7 +92,10 @@ void Controller::doAccept() {
 void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Message> msg) {
     std::shared_ptr<AgentTcpSession> session = nullptr;
     if (conn->getContext().has_value()) {
-        session = std::any_cast<std::shared_ptr<AgentTcpSession>>(conn->getContext());
+        try {
+            auto weak_s = std::any_cast<std::weak_ptr<AgentTcpSession>>(conn->getContext());
+            session = weak_s.lock();
+        } catch (const std::bad_any_cast&) {}
     }
 
     // Registration step
@@ -98,10 +105,10 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
             payload.deserialize(msg->payload);
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                auto                        new_session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
+                auto new_session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
                 new_session->setAgentId(payload.agent_id);
                 sessions_[payload.agent_id] = new_session;
-                conn->setContext(new_session);
+                conn->setContext(std::weak_ptr<AgentTcpSession>(new_session));
             }
             spdlog::info("Agent {} registered", payload.agent_id);
         } else {

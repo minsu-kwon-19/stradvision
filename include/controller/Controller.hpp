@@ -32,6 +32,16 @@ class Controller : public core::interface::ICommandBus {
         return store_;
     }
 
+    void clearPolicies() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        policies_.clear();
+    }
+
+    void addPolicy(const Policy& p) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        policies_.push_back(p);
+    }
+
    private:
     void doAccept();
     void onMessage(std::shared_ptr<core::comm::TcpComm>    conn,

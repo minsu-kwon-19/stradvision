@@ -34,32 +34,61 @@ TEST_F(IntegrationTest, ControllerPolicyTriggerTest) {
     }
 
     std::thread controller_thread([&]() { controller_ioc.run(); });
-
     std::thread agent_thread([&]() { agent_ioc.run(); });
 
     for (auto& agent : agents) {
         agent->start("127.0.0.1", std::to_string(port));
     }
 
-    auto start_time  = std::chrono::steady_clock::now();
-    bool all_changed = false;
+    controller->clearPolicies();
+    Policy p1;
+    p1.name                = "ForceMode1";
+    p1.condition.metric    = "average_load";
+    p1.condition.op        = ">";
+    p1.condition.threshold = -1.0;
+    p1.action.command      = core::message::MessageType::CMD_SET_MODE;
+    p1.action.mode         = 1;
+    controller->addPolicy(p1);
 
-    while (std::chrono::steady_clock::now() - start_time < std::chrono::seconds(30)) {
-        int changed_count = 0;
+    auto start_time     = std::chrono::steady_clock::now();
+    bool phase1_success = false;
+    while (std::chrono::steady_clock::now() - start_time < std::chrono::seconds(15)) {
+        int count = 0;
         for (auto& agent : agents) {
-            if (agent->getCurrentMode() == 1) {
-                changed_count++;
-            }
+            if (agent->getCurrentMode() == 1) count++;
         }
-
-        if (changed_count >= agents.size()) {
-            all_changed = true;
+        if (count == NUM_AGENTS) {
+            phase1_success = true;
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
+    EXPECT_TRUE(phase1_success) << "Timeout waiting for all agents to switch to Mode 1";
 
-    EXPECT_TRUE(all_changed) << "Not all agents received the mode change within the timeout.";
+    controller->clearPolicies();
+    Policy p0;
+    p0.name                = "ForceMode0";
+    p0.condition.metric    = "average_load";
+    p0.condition.op        = ">";
+    p0.condition.threshold = -1.0;
+    p0.action.command      = core::message::MessageType::CMD_SET_MODE;
+    p0.action.mode         = 0;
+    controller->addPolicy(p0);
+
+    start_time          = std::chrono::steady_clock::now();
+    bool phase2_success = false;
+    while (std::chrono::steady_clock::now() - start_time < std::chrono::seconds(15)) {
+        int count = 0;
+        for (auto& agent : agents) {
+            if (agent->getCurrentMode() == 0) count++;
+        }
+        if (count == NUM_AGENTS) {
+            phase2_success = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    EXPECT_TRUE(phase2_success) << "Timeout waiting for all agents to recover to Mode 0";
 
     controller_ioc.stop();
     agent_ioc.stop();
