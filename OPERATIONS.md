@@ -1,6 +1,6 @@
 # Operations Guide (Logging & Monitoring)
 
-## 📝 구조화된 로깅 (JSON Line Format)
+## 구조화된 로깅 (JSON Line Format)
 모든 로그는 즉시 파싱 가능한 JSON 형태로 출력됩니다.
 
 **포맷 예시:**
@@ -9,7 +9,7 @@
 {"time": "2026-03-23T19:42:16.456+0900", "level": "warn", "message": "Agent 3 is unhealthy, dropping session"}
 ```
 
-## 📈 메트릭 모니터링 (Prometheus)
+## 메트릭 모니터링 (Prometheus)
 
 **노출 메트릭:**
 *   `active_connections`: 현재 연결된 에이전트 수

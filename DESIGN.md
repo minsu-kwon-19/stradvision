@@ -1,8 +1,8 @@
 # System Design & Architecture
 
-## 🏛️ Architecture Overview
+## Architecture Overview
 
-본 시스템은 중앙 집중식 **Controller**와 분산된 **Agent**들 간의 Binary Message 기반 통신 구조를 가집니다.
+시스템은 중앙 집중식 **Controller**와 분산된 **Agent**들 간의 Binary Message 기반 통신 구조를 가집니다.
 
 ```mermaid
 graph TD
@@ -21,7 +21,7 @@ graph TD
     AS <== TCP/Binary ==> A2
 ```
 
-## 📊 Class Diagram (Interface-based Architecture)
+## Class Diagram (Interface-based Architecture)
 
 ```mermaid
 classDiagram
@@ -86,7 +86,7 @@ classDiagram
     TcpComm o-- IMessageParser : uses
 ```
 
-## 📂 클래스 책임 (Responsibilities)
+## 클래스 책임 (Responsibilities)
 
 | Component | Responsibility |
 | :--- | :--- |
@@ -96,7 +96,7 @@ classDiagram
 | **TcpComm** | (Core) ASIO 기반 비동기 스트림 처리 및 에러 핸들링 |
 | **BinaryMessageParser** | (Core) 가변 길이 바이너리 프로토콜 직렬화/역직렬화 |
 
-## 🔄 Sequence Diagrams
+## Sequence Diagrams
 
 ### 1. Connection & Registration (Handshake)
 
