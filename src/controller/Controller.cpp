@@ -16,10 +16,16 @@ using namespace core::comm;
 namespace controller {
 
 Controller::Controller(asio::io_context& ioc, short port)
-    : ioc_(ioc), acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)), timer_(ioc) {
+    : ioc_(ioc),
+      acceptor_(ioc, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
+      timer_(ioc),
+      signals_(ioc, SIGINT, SIGTERM),
+      metrics_tracker_(std::make_shared<MetricsTracker>()),
+      metrics_server_(std::make_unique<MetricsServer>(ioc, 9090, metrics_tracker_)) {
     loadPolicies();
     doAccept();
     startHealthCheck();
+    handleSignals();
 
     auto endpoint = acceptor_.local_endpoint();
 
@@ -38,29 +44,44 @@ void Controller::broadcastCommand(std::shared_ptr<Message> msg) {
 
 void Controller::sendCommandTo(uint32_t agent_id, std::shared_ptr<Message> msg) {
     std::lock_guard<std::mutex> lock(mutex_);
-    auto                        it = sessions_.find(agent_id);
+
+    auto it = sessions_.find(agent_id);
     if (it != sessions_.end() && it->second->isHealthy()) {
         it->second->send(msg);
     }
 }
 
 void Controller::doAccept() {
+    if (is_shutting_down_) {
+        return;
+    }
     acceptor_.async_accept([this](const asio::error_code& ec, asio::ip::tcp::socket socket) {
         if (!ec) {
             spdlog::info("Accepted new connection");
-            auto conn =
-                TcpComm::create(ioc_, std::move(socket), std::make_shared<BinaryMessageParser>());
+
+            auto parser  = std::make_shared<BinaryMessageParser>();
+            auto conn    = TcpComm::create(ioc_, std::move(socket), parser);
+            auto session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
+
+            metrics_tracker_->active_connections.fetch_add(1);
 
             conn->setMessageHandler([this](auto c, auto m) { onMessage(c, m); });
             conn->setErrorHandler([this](auto c, auto e) {
                 spdlog::warn("Connection closed: {}", e.message());
                 if (c->getContext().has_value()) {
-                    auto s = std::any_cast<std::shared_ptr<AgentTcpSession>>(c->getContext());
-                    if (s && s->getAgentId() != 0) {
-                        std::lock_guard<std::mutex> lock(mutex_);
-                        sessions_.erase(s->getAgentId());
+                    try {
+                        auto weak_s =
+                            std::any_cast<std::weak_ptr<AgentTcpSession>>(c->getContext());
+                        if (auto s = weak_s.lock()) {
+                            if (s->getAgentId() != 0) {
+                                std::lock_guard<std::mutex> lock(mutex_);
+                                sessions_.erase(s->getAgentId());
+                            }
+                        }
+                    } catch (const std::bad_any_cast&) {
                     }
                 }
+                metrics_tracker_->active_connections.fetch_sub(1);
             });
 
             conn->start();
@@ -72,7 +93,11 @@ void Controller::doAccept() {
 void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Message> msg) {
     std::shared_ptr<AgentTcpSession> session = nullptr;
     if (conn->getContext().has_value()) {
-        session = std::any_cast<std::shared_ptr<AgentTcpSession>>(conn->getContext());
+        try {
+            auto weak_s = std::any_cast<std::weak_ptr<AgentTcpSession>>(conn->getContext());
+            session     = weak_s.lock();
+        } catch (const std::bad_any_cast&) {
+        }
     }
 
     // Registration step
@@ -82,10 +107,10 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
             payload.deserialize(msg->payload);
             {
                 std::lock_guard<std::mutex> lock(mutex_);
-                auto                        new_session = std::make_shared<AgentTcpSession>(conn);
+                auto new_session = std::make_shared<AgentTcpSession>(conn, metrics_tracker_);
                 new_session->setAgentId(payload.agent_id);
                 sessions_[payload.agent_id] = new_session;
-                conn->setContext(new_session);
+                conn->setContext(std::weak_ptr<AgentTcpSession>(new_session));
             }
             spdlog::info("Agent {} registered", payload.agent_id);
         } else {
@@ -105,7 +130,7 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     // Heartbeat
     if (msg->header.type == MessageType::HEARTBEAT) {
         session->updateHeartbeat();
-        spdlog::debug("Agent {} HEARTBEAT", session->getAgentId());
+        // spdlog::debug("Agent {} HEARTBEAT", session->getAgentId());
         return;
     }
 
@@ -115,8 +140,8 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
         payload.deserialize(msg->payload);
         store_.updateAgentState(session->getAgentId(), payload, msg->header.timestamp);
 
-        spdlog::debug("Agent {} STATE (mode: {}, load: {:.2f}%)", session->getAgentId(),
-                      payload.mode, payload.load);
+        spdlog::debug("Agent {} STATE (header_id: {}, load: {:.2f}%)", session->getAgentId(),
+                      msg->header.header_id, payload.load);
         return;
     }
 
@@ -124,7 +149,7 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     if (msg->header.type == MessageType::ACK) {
         AckPayload payload;
         payload.deserialize(msg->payload);
-        spdlog::info("Agent {} ACK (cmd_id: {})", session->getAgentId(), payload.cmd_id);
+        session->handleAck(payload.cmd_id);
         return;
     }
 
@@ -132,27 +157,32 @@ void Controller::onMessage(std::shared_ptr<TcpComm> conn, std::shared_ptr<Messag
     if (msg->header.type == MessageType::NACK) {
         NackPayload payload;
         payload.deserialize(msg->payload);
-        spdlog::warn("Agent {} NACK: {}", session->getAgentId(), payload.reason);
+        spdlog::warn("Agent {} NACK (cmd_id: {}): {}", session->getAgentId(), payload.cmd_id,
+                     payload.reason);
+        session->handleAck(payload.cmd_id);  // Also remove from pending
         return;
     }
 }
 
 void Controller::startHealthCheck() {
-    timer_.expires_after(std::chrono::seconds(1));
+    if (is_shutting_down_) {
+        return;
+    }
+    timer_.expires_after(std::chrono::seconds(2));
     timer_.async_wait([this](const asio::error_code& ec) {
         if (!ec) {
             checkPolicyUpdate();
 
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                for (auto it = sessions_.begin(); it != sessions_.end();) {
-                    if (!it->second->isHealthy()) {
-                        spdlog::warn("Agent {} is unhealthy, dropping", it->first);
-                        it->second->disconnect();
-                        it = sessions_.erase(it);
-                    } else {
-                        ++it;
-                    }
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (auto it = sessions_.begin(); it != sessions_.end();) {
+                if (!it->second->isHealthy()) {
+                    spdlog::warn("Agent {} is unhealthy, dropping session", it->first);
+                    it->second->disconnect();
+                    metrics_tracker_->active_connections.fetch_sub(1);
+                    it = sessions_.erase(it);
+                } else {
+                    it->second->checkCommandTimeouts();
+                    ++it;
                 }
             }
 
@@ -175,11 +205,14 @@ void Controller::startHealthCheck() {
                                          policy.action.mode);
                             overload_mode_ = (policy.action.mode == 1);
 
-                            CmdSetModePayload payload{policy.action.mode};
-                            auto              type = MessageType::CMD_SET_MODE;
-                            auto msg = std::make_shared<Message>(type, payload.serialize(), 0,
-                                                                 getNextId(type));
-                            broadcastCommand(msg);
+                            uint32_t next_id = getNextId(MessageType::CMD_SET_MODE);
+                            for (auto& [id, s] : sessions_) {
+                                if (s->isHealthy()) {
+                                    auto msg = s->getSetModeMsg(policy.action.mode, next_id);
+                                    s->trackCommand(msg);
+                                    s->send(msg);
+                                }
+                            }
                         }
                     }
                 }
@@ -245,6 +278,32 @@ void Controller::checkPolicyUpdate() {
             }
         }
     } catch (...) {
+    }
+}
+
+void Controller::handleSignals() {
+    signals_.async_wait([this](asio::error_code ec, int signo) {
+        if (!ec) {
+            spdlog::info("Received signal {}. Initiating Shutdown...", signo);
+            shutdownController();
+        }
+    });
+}
+
+void Controller::shutdownController() {
+    if (is_shutting_down_) {
+        return;
+    }
+    is_shutting_down_ = true;
+
+    asio::error_code ec;
+    metrics_server_.reset();
+    acceptor_.cancel(ec);
+    timer_.cancel();
+
+    spdlog::info("Flushing pending commands for all {} sessions...", sessions_.size());
+    for (auto& [id, session] : sessions_) {
+        session->flushPendingCommands();
     }
 }
 

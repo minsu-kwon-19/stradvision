@@ -1,0 +1,7 @@
+{
+  "clang-format.executable": "C:\\Program Files\\LLVM\\bin\\clang-format.exe",
+  "editor.formatOnSave": true,
+  "[cpp]": {
+    "editor.defaultFormatter": "xaver.clang-format"
+  }
+}

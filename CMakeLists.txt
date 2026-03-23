@@ -12,7 +12,14 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# FetchContent for ASIO, GTest, Spdlog
+# ASan / UBSan Configuration
+option(ENABLE_ASAN "Enable Address Sanitizer and Undefined Behavior Sanitizer" OFF)
+if(ENABLE_ASAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-fsanitize=address,undefined -g -O1 -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
+# FetchContent for ASIO, GTest, Spdlog, nlohmann/json
 include(FetchContent)
 
 # Asio (standalone)
